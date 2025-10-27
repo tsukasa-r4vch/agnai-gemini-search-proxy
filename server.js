@@ -88,7 +88,23 @@ ${context}
       gemini?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "（Geminiから回答が得られませんでした）";
 
-    res.json({ answer });
+    res.json({
+  id: "chatcmpl-agnai-" + Date.now(),
+  object: "chat.completion",
+  created: Math.floor(Date.now() / 1000),
+  model: GEMINI_MODEL,
+  choices: [
+    {
+      index: 0,
+      message: {
+        role: "assistant",
+        content: [{ text: answer }]
+      },
+      finish_reason: "stop"
+    }
+  ]
+});
+    
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
