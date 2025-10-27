@@ -27,9 +27,15 @@ async function safeJson(res) {
 
 // 💬 メイン処理
 app.post("/ask", async (req, res) => {
-  const { query } = req.body;
-  if (!query)
-    return res.status(400).json({ error: "Missing 'query' in body" });
+    const query = req.body.query 
+        // messages配列があれば、最後の要素のcontentを取得
+        || req.body.messages?.[req.body.messages.length - 1]?.content 
+        || req.body.prompt; // promptキーも念のためサポート
+    if (!query)
+        return res.status(400).json({ 
+            error: "Missing expected input key (query, messages[].content, or prompt) in body",
+            received_body_keys: Object.keys(req.body)
+        });
 
   try {
     // 1️⃣ Tavily で検索
