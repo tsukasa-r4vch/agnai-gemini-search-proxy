@@ -50,6 +50,11 @@ ${context}
     );
 
     const gemini = await geminiRes.json();
+
+
+// 🔍 デバッグ出力を追加
+console.log("Gemini raw response:", JSON.stringify(gemini, null, 2));
+    
     const answer =
       gemini?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "（Geminiから回答が得られませんでした）";
