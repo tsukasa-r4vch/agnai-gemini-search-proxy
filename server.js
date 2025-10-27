@@ -27,7 +27,7 @@ async function safeJson(res) {
 
 // 💬 メイン処理
 app.post("/ask", async (req, res) => {
-  // OpenAI形式のリクエストから質問文を抽出
+  // OpenAI形式リクエストから質問文を抽出
   const model = req.body.model || DEFAULT_MODEL;
   const messages = req.body.messages;
   if (!messages || !Array.isArray(messages) || messages.length === 0)
@@ -39,7 +39,7 @@ app.post("/ask", async (req, res) => {
   if (!query) return res.status(400).json({ error: "No user text found" });
 
   try {
-    // 1️⃣ Tavily で検索
+    // 1️⃣ Tavily検索
     const tavilyRes = await fetch("https://api.tavily.com/search", {
       method: "POST",
       headers: {
@@ -63,10 +63,8 @@ app.post("/ask", async (req, res) => {
 ${context}
     `;
 
-    // 🔹 v1/v1beta 自動切替
-    const geminiURL = model.startsWith("gemini-2")
-      ? `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${GEMINI_API_KEY}`
-      : `https://generativelanguage.googleapis.com/v1/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    // 🔹 Gemini API URL (AI Studio形式)
+    const geminiURL = `https://generativelanguage.googleapis.com/v1/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
     const geminiRes = await fetch(geminiURL, {
       method: "POST",
@@ -87,11 +85,12 @@ ${context}
       }
     })();
 
+    // 🔹 回答抽出
     const answer =
       gemini?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "（Geminiから回答が得られませんでした）";
 
-    // 🔹 OpenAI Chat API 互換形式で返す
+    // 🔹 OpenAI Chat API互換形式で返す
     res.json({
       id: "chatcmpl-agnai-" + Date.now(),
       object: "chat.completion",
@@ -117,5 +116,5 @@ ${context}
 // 🔹 Render 用ポート
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
-  console.log(`🌐 Server running on port ${PORT}`)
+  console.log(`🌐 Server running on port ${PORT} (model: ${DEFAULT_MODEL})`)
 );
