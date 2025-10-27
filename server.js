@@ -7,12 +7,23 @@ app.use(express.json());
 // 🔑 環境変数の読み込み
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash-latest"; // デフォルト設定
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite"; // デフォルトを最新に
 
 // 🔎 動作確認用エンドポイント
 app.get("/", (_, res) =>
   res.send(`✅ Gemini Search Proxy is running! (model: ${GEMINI_MODEL})`)
 );
+
+// 💬 JSON安全パース
+async function safeJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("⚠️ JSON parse failed:", text.slice(0, 500));
+    return {};
+  }
+}
 
 // 💬 メイン処理
 app.post("/ask", async (req, res) => {
@@ -31,7 +42,7 @@ app.post("/ask", async (req, res) => {
       body: JSON.stringify({ query, max_results: 3 }),
     });
 
-    const tavily = await tavilyRes.json();
+    const tavily = await safeJson(tavilyRes);
     const context =
       tavily.results?.map(r => `- ${r.title}\n${r.content}`).join("\n\n") ||
       "（検索結果なし）";
@@ -44,10 +55,11 @@ app.post("/ask", async (req, res) => {
 検索結果:
 ${context}
     `;
-    
-const geminiURL = GEMINI_MODEL.startsWith("gemini-2")
-  ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
-  : `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+    // 🔹 v1 / v1beta 自動切り替え
+    const geminiURL = GEMINI_MODEL.startsWith("gemini-2")
+      ? `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
+      : `https://generativelanguage.googleapis.com/v1/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     const geminiRes = await fetch(geminiURL, {
       method: "POST",
@@ -57,10 +69,20 @@ const geminiURL = GEMINI_MODEL.startsWith("gemini-2")
       }),
     });
 
-    const gemini = await safeJson(geminiRes);
+    // 🔹 生レスポンスをログに出す
+    const rawText = await geminiRes.text();
+    console.log("💡 Gemini raw text response:", rawText);
 
-    console.log("Gemini raw response:", gemini);
-    console.log("Gemini raw response:", JSON.stringify(gemini, null, 2));
+    // 🔹 JSONパース（安全版）
+    const gemini = (() => {
+      try {
+        return JSON.parse(rawText);
+      } catch {
+        return {};
+      }
+    })();
+
+    console.log("Gemini parsed response:", JSON.stringify(gemini, null, 2));
 
     const answer =
       gemini?.candidates?.[0]?.content?.parts?.[0]?.text ||
@@ -77,13 +99,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log(`🌐 Server running on port ${PORT} (model: ${GEMINI_MODEL})`)
 );
-
-async function safeJson(res) {
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    console.error("⚠️ JSON parse failed:", text.slice(0, 500)); // 先頭500文字を出力
-    return {}; // 空オブジェクトを返して処理を継続
-  }
-}
