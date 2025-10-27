@@ -7,7 +7,7 @@ app.use(express.json());
 // 🔑 環境変数
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
 
 // 🔎 動作確認
 app.get("/", (_, res) =>
@@ -65,8 +65,8 @@ ${context}
 
     // 🔹 v1/v1beta 自動切替
     const geminiURL = model.startsWith("gemini-2")
-      ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`
-      : `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+      ? `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${GEMINI_API_KEY}`
+      : `https://generativelanguage.googleapis.com/v1/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
     const geminiRes = await fetch(geminiURL, {
       method: "POST",
