@@ -55,7 +55,9 @@ ${context}
       }),
     });
 
-    const gemini = await geminiRes.json();
+    const gemini = await safeJson(geminiRes);
+
+    console.log("Gemini raw response:", gemini);
     console.log("Gemini raw response:", JSON.stringify(gemini, null, 2));
 
     const answer =
@@ -73,3 +75,13 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log(`🌐 Server running on port ${PORT} (model: ${GEMINI_MODEL})`)
 );
+
+async function safeJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("⚠️ JSON parse failed:", text.slice(0, 500)); // 先頭500文字を出力
+    return {}; // 空オブジェクトを返して処理を継続
+  }
+}
