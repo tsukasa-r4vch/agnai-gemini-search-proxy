@@ -8,6 +8,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
+// サービス稼働確認
 app.get("/", (_, res) =>
   res.send(`✅ Gemini + Tavily Proxy running on model: ${GEMINI_MODEL}`)
 );
@@ -22,7 +23,15 @@ app.post("/v1/chat/completions", async (req, res) => {
       return res.status(400).json({ error: "No messages found" });
     }
 
-    // 最後のユーザー発言だけを検索に使用
+    // -----------------------------
+    // 1️⃣ システムプロンプトを要約
+    // -----------------------------
+    const systemPrompt = messages.find(m => m.role === "system")?.content || "";
+    const summarizedSystemPrompt = await summarizeSystemPrompt(systemPrompt);
+
+    // -----------------------------
+    // 2️⃣ 最後のユーザー質問だけを検索に使用
+    // -----------------------------
     const lastUserMessage = messages
       .filter((m) => m.role === "user")
       .slice(-1)[0]?.content;
@@ -31,7 +40,9 @@ app.post("/v1/chat/completions", async (req, res) => {
       return res.status(400).json({ error: "No user text found" });
     }
 
-    // 🔎 Tavily検索
+    // -----------------------------
+    // 3️⃣ Tavily検索（任意）
+    // -----------------------------
     let context = "（検索結果なし）";
     if (TAVILY_API_KEY) {
       try {
@@ -52,18 +63,26 @@ app.post("/v1/chat/completions", async (req, res) => {
       }
     }
 
-    // Geminiに送信するプロンプト
+    // -----------------------------
+    // 4️⃣ Gemini に送るプロンプト
+    // -----------------------------
+    const chatHistory = messages
+      .filter(m => m.role !== "system")
+      .map(m => `${m.role}: ${m.content}`).join("\n\n");
+
     const promptWithContext = `
-以下はユーザーとの小説的会話です。検索結果も参考にしてください。
+${summarizedSystemPrompt}
 
 検索結果:
 ${context}
 
 会話履歴:
-${messages.map((m) => `${m.role}: ${m.content}`).join("\n\n")}
+${chatHistory}
 `;
 
-    // Gemini API 呼び出し
+    // -----------------------------
+    // 5️⃣ Gemini API 呼び出し
+    // -----------------------------
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -81,7 +100,9 @@ ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\n")}
       geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "（Geminiから回答が得られませんでした）";
 
-    // OpenAI互換レスポンス
+    // -----------------------------
+    // 6️⃣ OpenAI互換レスポンス返却
+    // -----------------------------
     res.json({
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
@@ -106,7 +127,9 @@ app.listen(PORT, () =>
   console.log(`🌐 Server running on port ${PORT} (model: ${GEMINI_MODEL})`)
 );
 
+// -----------------------------
 // 安全なJSON解析
+// -----------------------------
 async function safeJson(res) {
   const text = await res.text();
   try {
@@ -114,5 +137,40 @@ async function safeJson(res) {
   } catch {
     console.error("⚠️ Invalid JSON:", text.slice(0, 500));
     return {};
+  }
+}
+
+// -----------------------------
+// システムプロンプト要約関数
+// -----------------------------
+async function summarizeSystemPrompt(systemPrompt) {
+  if (!systemPrompt) return "";
+
+  try {
+    const summaryRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `以下の文章を短く要約してください。重要な情報は残してください:\n\n${systemPrompt}`
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+    const data = await safeJson(summaryRes);
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || systemPrompt;
+  } catch (err) {
+    console.error("System prompt summarization error:", err);
+    return systemPrompt;
   }
 }
