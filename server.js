@@ -27,7 +27,7 @@ app.post("/v1/chat/completions", async (req, res) => {
     // 1️⃣ システムプロンプトを要約
     // -----------------------------
     const systemPrompt = messages.find(m => m.role === "system")?.content || "";
-    const summarizedSystemPrompt = await summarizeSystemPrompt(systemPrompt);
+    //const summarizedSystemPrompt = await summarizeSystemPrompt(systemPrompt);
 
     // -----------------------------
     // 2️⃣ 最後のユーザー質問だけを検索に使用
@@ -71,7 +71,8 @@ app.post("/v1/chat/completions", async (req, res) => {
       .map(m => `${m.role}: ${m.content}`).join("\n\n");
 
     const promptWithContext = `
-${summarizedSystemPrompt}
+システムプロンプト:
+${systemPrompt}
 
 検索結果:
 ${context}
@@ -146,31 +147,31 @@ async function safeJson(res) {
 async function summarizeSystemPrompt(systemPrompt) {
   if (!systemPrompt) return "";
 
-//  try {
-//    const summaryRes = await fetch(
-//      `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-//      {
-//        method: "POST",
-//        headers: { "Content-Type": "application/json" },
-//        body: JSON.stringify({
-//          contents: [
-//            {
-//              role: "user",
-//              parts: [
-//                {
-//                  text: `以下の文章を、長さを7割程度に抑えて要約してください。重要な情報は残してください:\n\n${systemPrompt}`
-//                }
-//              ]
-//            }
-//          ]
-//        })
-//      }
-//    );
+  try {
+    const summaryRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `以下の文章を、長さを7割程度に抑えて要約してください。重要な情報は残してください:\n\n${systemPrompt}`
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
 
     const data = await safeJson(summaryRes);
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || systemPrompt;
-//  } catch (err) {
-//    console.error("System prompt summarization error:", err);
-//    return systemPrompt;
-//  }
+  } catch (err) {
+    console.error("System prompt summarization error:", err);
+    return systemPrompt;
+  }
 }
