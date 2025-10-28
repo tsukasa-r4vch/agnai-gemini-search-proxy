@@ -94,19 +94,19 @@ ${chatHistory}
           safetySettings: [
             {
               category: "HARM_CATEGORY_HARASSMENT",
-              threshold: "OFF"
+              threshold: "BLOCK_NONE"
             },
             {
               category: "HARM_CATEGORY_HATE_SPEECH",
-              threshold: "OFF"
+              threshold: "BLOCK_NONE"
             },
             {
               category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              threshold: "OFF"
+              threshold: "BLOCK_NONE"
             },
             {
               category: "HARM_CATEGORY_DANGEROUS_CONTENT ",
-              threshold: "OFF"
+              threshold: "BLOCK_NONE"
             }
           ]
         }),
