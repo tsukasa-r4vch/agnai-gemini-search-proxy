@@ -4,41 +4,32 @@ import fetch from "node-fetch";
 const app = express();
 app.use(express.json());
 
+// 環境変数
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
-const DEFAULT_GEMINI_MODEL = "models/gemini-2.5-flash-lite";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 // サービス稼働確認
 app.get("/", (_, res) =>
-  res.send(`✅ Gemini + OpenRouter + Tavily Proxy running`)
+  res.send(`✅ Gemini + OpenRouter Proxy running (default model: ${GEMINI_MODEL})`)
 );
 
 // OpenAI互換エンドポイント
 app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { model, messages } = req.body;
-    if (!model) return res.status(400).json({ error: "Model is required" });
-    if (!messages || !Array.isArray(messages) || messages.length === 0)
+    const selectedModel = model || GEMINI_MODEL;
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: "No messages found" });
+    }
 
-    // -----------------------------
-    // システムプロンプト要約
-    // -----------------------------
-    const systemPrompt = messages.find(m => m.role === "system")?.content || "";
-    // ここは必要に応じて要約関数を呼べる
-    // const summarizedSystemPrompt = await summarizeSystemPrompt(systemPrompt);
-    const summarizedSystemPrompt = systemPrompt;
-
-    // -----------------------------
-    // 最後のユーザー質問だけを検索に使用
-    // -----------------------------
+    // 最後のユーザーメッセージ
     const lastUserMessage = messages.filter(m => m.role === "user").slice(-1)[0]?.content;
     if (!lastUserMessage) return res.status(400).json({ error: "No user text found" });
 
-    // -----------------------------
     // Tavily検索（任意）
-    // -----------------------------
     let context = "（検索結果なし）";
     if (TAVILY_API_KEY) {
       try {
@@ -52,22 +43,23 @@ app.post("/v1/chat/completions", async (req, res) => {
         });
         const tavilyData = await safeJson(tavilyRes);
         context =
-          tavilyData.results?.map(r => `- ${r.title}\n${r.content}`).join("\n\n") || context;
+          tavilyData.results?.map(r => `- ${r.title}\n${r.content}`).join("\n\n") ||
+          context;
       } catch (err) {
         console.error("Tavily search error:", err);
       }
     }
 
-    // -----------------------------
-    // プロンプト作成
-    // -----------------------------
-    const chatHistory = messages
-      .filter(m => m.role !== "system")
+    // システムプロンプト抽出
+    const systemPrompt = messages.find(m => m.role === "system")?.content || "";
+
+    // 履歴生成
+    const chatHistory = messages.filter(m => m.role !== "system")
       .map(m => `${m.role}: ${m.content}`).join("\n\n");
 
     const promptWithContext = `
 システムプロンプト:
-${summarizedSystemPrompt}
+${systemPrompt}
 
 検索結果:
 ${context}
@@ -76,30 +68,30 @@ ${context}
 ${chatHistory}
 `;
 
-    // -----------------------------
-    // モデルごとの呼び出し
-    // -----------------------------
-    let answer = "（応答が得られませんでした）";
-    if (model.startsWith("gemini:")) {
-      const geminiModel = model.replace("gemini:", "") || DEFAULT_GEMINI_MODEL;
-      answer = await callGemini(geminiModel, promptWithContext);
-    } else if (model.startsWith("openrouter:")) {
-      const orModel = model.replace("openrouter:", "");
-      answer = await callOpenRouter(orModel, messages);
+    let answer = "（回答なし）";
+
+    // モデルによる振り分け
+    if (selectedModel.startsWith("openrouter:")) {
+      // OpenRouterの場合
+      const modelName = selectedModel.replace(/^openrouter:/, "");
+      answer = await callOpenRouter(modelName, messages);
     } else {
-      return res.status(400).json({ error: "Unknown model prefix" });
+      // Geminiの場合
+      answer = await callGemini(selectedModel, promptWithContext);
     }
 
-    // -----------------------------
-    // OpenAI互換レスポンス
-    // -----------------------------
+    // OpenAI互換レスポンス返却
     res.json({
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
-      model,
+      model: selectedModel,
       choices: [
-        { index: 0, message: { role: "assistant", content: answer }, finish_reason: "stop" },
+        {
+          index: 0,
+          message: { role: "assistant", content: answer },
+          finish_reason: "stop",
+        },
       ],
     });
   } catch (err) {
@@ -109,12 +101,14 @@ ${chatHistory}
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🌐 Server running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🌐 Server running on port ${PORT}`)
+);
 
 // -----------------------------
-// Gemini呼び出し
+// Gemini API呼び出し
 // -----------------------------
-async function callGemini(model, prompt) {
+async function callGemini(model, promptWithContext) {
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${GEMINI_API_KEY}`,
@@ -122,7 +116,7 @@ async function callGemini(model, prompt) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          contents: [{ role: "user", parts: [{ text: promptWithContext }] }],
           safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -135,79 +129,43 @@ async function callGemini(model, prompt) {
     const data = await safeJson(res);
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || "（Geminiから回答が得られませんでした）";
   } catch (err) {
-    console.error("Gemini call error:", err);
-    return "（Gemini呼び出しでエラー発生）";
+    console.error("Gemini API error:", err);
+    return "（Gemini呼び出し中にエラーが発生しました）";
   }
 }
 
 // -----------------------------
-// OpenRouter呼び出し
+// OpenRouter API呼び出し
 // -----------------------------
-async function callOpenRouter(model, messages) {
+async function callOpenRouter(modelName, messages) {
   try {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`
       },
       body: JSON.stringify({
-        model,
-        messages,        // OpenAI互換形式で送信
-        stream: false,   // 念のため明示
-        max_tokens: 1024 // 必要に応じて調整
-      }),
+        model: modelName,
+        messages: messages
+      })
     });
     const data = await safeJson(res);
     return data?.choices?.[0]?.message?.content || "（OpenRouterから回答が得られませんでした）";
   } catch (err) {
-    console.error("OpenRouter call error:", err);
-    return "（OpenRouter呼び出しでエラー発生）";
+    console.error("OpenRouter API error:", err);
+    return "（OpenRouter呼び出し中にエラーが発生しました）";
   }
 }
 
-
 // -----------------------------
-// 安全JSON解析
+// 安全なJSON解析
 // -----------------------------
 async function safeJson(res) {
   const text = await res.text();
-  try { return JSON.parse(text); } 
+  try { return JSON.parse(text); }
   catch { 
     console.error("⚠️ Invalid JSON:", text.slice(0, 500));
     return {};
-  }
-}
-
-// -----------------------------
-// システムプロンプト要約（必要に応じて使用）
-// -----------------------------
-async function summarizeSystemPrompt(systemPrompt) {
-  if (!systemPrompt) return "";
-  try {
-    const summaryRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/${DEFAULT_GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `以下の文章を、長さを7割程度に抑えて要約してください。重要な情報は残してください:\n\n${systemPrompt}`
-                }
-              ]
-            }
-          ]
-        })
-      }
-    );
-    const data = await safeJson(summaryRes);
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || systemPrompt;
-  } catch (err) {
-    console.error("System prompt summarization error:", err);
-    return systemPrompt;
   }
 }
