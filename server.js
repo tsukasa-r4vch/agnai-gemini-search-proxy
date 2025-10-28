@@ -169,8 +169,8 @@ async function summarizeSystemPrompt(systemPrompt) {
 
     const data = await safeJson(summaryRes);
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || systemPrompt;
-  } catch (err) {
-    console.error("System prompt summarization error:", err);
-    return systemPrompt;
-  }
+//  } catch (err) {
+//    console.error("System prompt summarization error:", err);
+//    return systemPrompt;
+//  }
 }
