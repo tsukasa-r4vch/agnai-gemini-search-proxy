@@ -146,26 +146,26 @@ async function safeJson(res) {
 async function summarizeSystemPrompt(systemPrompt) {
   if (!systemPrompt) return "";
 
-  try {
-    const summaryRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `以下の文章を、長さを7割程度に抑えて要約してください。重要な情報は残してください:\n\n${systemPrompt}`
-                }
-              ]
-            }
-          ]
-        })
-      }
-    );
+//  try {
+//    const summaryRes = await fetch(
+//      `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+//      {
+//        method: "POST",
+//        headers: { "Content-Type": "application/json" },
+//        body: JSON.stringify({
+//          contents: [
+//            {
+//              role: "user",
+//              parts: [
+//                {
+//                  text: `以下の文章を、長さを7割程度に抑えて要約してください。重要な情報は残してください:\n\n${systemPrompt}`
+//                }
+//              ]
+//            }
+//          ]
+//        })
+//      }
+//    );
 
     const data = await safeJson(summaryRes);
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || systemPrompt;
