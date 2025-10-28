@@ -81,8 +81,9 @@ ${context}
 ${chatHistory}
 `;
     let answer = "（Geminiから回答が得られませんでした）";
+    let count = 0;
 
-    while(answer = "（Geminiから回答が得られませんでした）"){
+    while(answer == "（Geminiから回答が得られませんでした）" && count < 5){
       // -----------------------------
       // 5️⃣ Gemini API 呼び出し
       // -----------------------------
@@ -120,6 +121,7 @@ ${chatHistory}
       answer =
         geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
         "（Geminiから回答が得られませんでした）";
+      count++;
     }
 
     // -----------------------------
