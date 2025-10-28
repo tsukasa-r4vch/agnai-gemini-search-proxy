@@ -10,8 +10,8 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
 // ✅ 動作確認
 app.get("/", (_, res) => res.send(`✅ Gemini Proxy OK (model: ${GEMINI_MODEL})`));
 
-// 💬 OpenAI形式の /ask
-app.post("/ask", async (req, res) => {
+// 💬 OpenAI形式の /v1/chat/completions
+app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { messages } = req.body;
     if (!messages || !Array.isArray(messages))
