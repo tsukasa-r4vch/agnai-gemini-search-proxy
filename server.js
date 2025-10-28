@@ -156,8 +156,8 @@ ${chatHistory}
 
       // 429ならリトライ
       if (apiRes.status === 429) {
-        console.warn(`⚠️ Rate limited, retrying in 3s... (attempt ${attempt + 1})`);
-        await new Promise(r => setTimeout(r, 3000));
+        console.warn(`⚠️ Rate limited, retrying in 1s... (attempt ${attempt + 1})`);
+        await new Promise(r => setTimeout(r, 1000));
         attempt++;
       } else {
         break;
