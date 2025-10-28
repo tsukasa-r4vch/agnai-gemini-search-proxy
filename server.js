@@ -4,105 +4,57 @@ import fetch from "node-fetch";
 const app = express();
 app.use(express.json());
 
-// 🔑 環境変数
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
 
-// 🔎 動作確認
-app.get("/", (_, res) =>
-  res.send(`✅ Gemini Search Proxy is running!`)
-);
+// ✅ 動作確認
+app.get("/", (_, res) => res.send(`✅ Gemini Proxy OK (model: ${GEMINI_MODEL})`));
 
-// 💬 JSON安全パース
-async function safeJson(res) {
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    console.error("⚠️ JSON parse failed:", text.slice(0, 500));
-    return {};
-  }
-}
-
-// 💬 メイン処理
+// 💬 OpenAI形式の /ask
 app.post("/ask", async (req, res) => {
-  // OpenAI形式リクエストから質問文を抽出
-  const model = req.body.model || DEFAULT_MODEL;
-  const messages = req.body.messages;
-  if (!messages || !Array.isArray(messages) || messages.length === 0)
-    return res.status(400).json({ error: "Missing messages in body" });
-
-  // 最新のユーザーメッセージを取得
-  const userMsg = messages.reverse().find(m => m.role === "user");
-  const query = userMsg?.content?.[0]?.text;
-  if (!query) return res.status(400).json({ error: "No user text found" });
-
   try {
-    // 1️⃣ Tavily検索
-    const tavilyRes = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${TAVILY_API_KEY}`,
-      },
-      body: JSON.stringify({ query, max_results: 3 }),
-    });
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages))
+      return res.status(400).json({ error: "Invalid messages format" });
 
-    const tavily = await safeJson(tavilyRes);
-    const context =
-      tavily.results?.map(r => `- ${r.title}\n${r.content}`).join("\n\n") ||
-      "（検索結果なし）";
+    // 🧠 userメッセージを抽出
+    const userMsg = messages.find(m => m.role === "user")?.content;
+    if (!userMsg) return res.status(400).json({ error: "No user text found" });
 
-    // 2️⃣ Gemini に質問
-    const prompt = `
-次の検索結果をもとに、ユーザーの質問に日本語で答えてください。
-質問: ${query}
-
-検索結果:
-${context}
-    `;
-
-    // 🔹 Gemini API URL (AI Studio形式)
-    const geminiURL = `https://generativelanguage.googleapis.com/v1/${model}:generateContent?key=${GEMINI_API_KEY}`;
-
-    const geminiRes = await fetch(geminiURL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      }),
-    });
-
-    const rawText = await geminiRes.text();
-    console.log("💡 Gemini raw text response:", rawText);
-
-    const gemini = (() => {
-      try {
-        return JSON.parse(rawText);
-      } catch {
-        return {};
+    // Geminiに送信
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: userMsg }] }],
+        }),
       }
-    })();
+    );
 
-    // 🔹 回答抽出
+    const text = await geminiRes.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error("Gemini raw text:", text);
+      return res.status(500).json({ error: "Invalid Gemini response" });
+    }
+
     const answer =
-      gemini?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "（Geminiから回答が得られませんでした）";
 
-    // 🔹 OpenAI Chat API互換形式で返す
     res.json({
-      id: "chatcmpl-agnai-" + Date.now(),
+      id: "chatcmpl-" + Date.now(),
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
-      model: model,
+      model: GEMINI_MODEL,
       choices: [
         {
           index: 0,
-          message: {
-            role: "assistant",
-            content: [{ text: answer }],
-          },
+          message: { role: "assistant", content: answer },
           finish_reason: "stop",
         },
       ],
@@ -113,8 +65,7 @@ ${context}
   }
 });
 
-// 🔹 Render 用ポート
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
-  console.log(`🌐 Server running on port ${PORT} (model: ${DEFAULT_MODEL})`)
+  console.log(`🌐 Running on port ${PORT} (model: ${GEMINI_MODEL})`)
 );
