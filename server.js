@@ -4,18 +4,21 @@ import fetch from "node-fetch";
 const app = express();
 app.use(express.json());
 
-// 環境変数
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
-const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
+// -----------------------------
 // サービス稼働確認
+// -----------------------------
 app.get("/", (_, res) =>
-  res.send(`✅ Gemini + OpenRouter Proxy running (default model: ${GEMINI_MODEL})`)
+  res.send(`✅ Gemini + OpenRouter + Tavily Proxy running`)
 );
 
+// -----------------------------
 // OpenAI互換エンドポイント
+// -----------------------------
 app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { model, messages } = req.body;
@@ -25,11 +28,22 @@ app.post("/v1/chat/completions", async (req, res) => {
       return res.status(400).json({ error: "No messages found" });
     }
 
-    // 最後のユーザーメッセージ
-    const lastUserMessage = messages.filter(m => m.role === "user").slice(-1)[0]?.content;
-    if (!lastUserMessage) return res.status(400).json({ error: "No user text found" });
+    // -----------------------------
+    // 1️⃣ システムプロンプト取得
+    // -----------------------------
+    const systemPrompt = messages.find(m => m.role === "system")?.content || "";
 
-    // Tavily検索（任意）
+    // -----------------------------
+    // 2️⃣ 最後のユーザー質問だけを検索に使用
+    // -----------------------------
+    const lastUserMessage = messages.filter(m => m.role === "user").slice(-1)[0]?.content;
+    if (!lastUserMessage) {
+      return res.status(400).json({ error: "No user text found" });
+    }
+
+    // -----------------------------
+    // 3️⃣ Tavily検索（任意）
+    // -----------------------------
     let context = "（検索結果なし）";
     if (TAVILY_API_KEY) {
       try {
@@ -50,12 +64,13 @@ app.post("/v1/chat/completions", async (req, res) => {
       }
     }
 
-    // システムプロンプト抽出
-    const systemPrompt = messages.find(m => m.role === "system")?.content || "";
-
-    // 履歴生成
-    const chatHistory = messages.filter(m => m.role !== "system")
-      .map(m => `${m.role}: ${m.content}`).join("\n\n");
+    // -----------------------------
+    // 4️⃣ 会話履歴作成
+    // -----------------------------
+    const chatHistory = messages
+      .filter(m => m.role !== "system")
+      .map(m => `${m.role}: ${m.content}`)
+      .join("\n\n");
 
     const promptWithContext = `
 システムプロンプト:
@@ -68,19 +83,72 @@ ${context}
 ${chatHistory}
 `;
 
-    let answer = "（回答なし）";
-
-    // モデルによる振り分け
+    // -----------------------------
+    // 5️⃣ API種別判定・リクエスト準備
+    // -----------------------------
+    let apiUrl, apiKeyHeader, body;
     if (selectedModel.startsWith("openrouter:")) {
-      // OpenRouterの場合
-      const modelName = selectedModel.replace(/^openrouter:/, "");
-      answer = await callOpenRouter(modelName, messages);
+      // OpenRouter
+      const modelName = selectedModel.replace("openrouter:", "");
+      apiUrl = `https://openrouter.ai/api/v1/chat/completions`;
+      apiKeyHeader = { Authorization: `Bearer ${OPENROUTER_API_KEY}` };
+      body = {
+        model: modelName,
+        messages: [{ role: "user", content: promptWithContext }],
+      };
     } else {
-      // Geminiの場合
-      answer = await callGemini(selectedModel, promptWithContext);
+      // Gemini
+      apiUrl = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${GEMINI_API_KEY}`;
+      apiKeyHeader = {};
+      body = {
+        contents: [{ role: "user", parts: [{ text: promptWithContext }] }],
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+        ],
+      };
     }
 
-    // OpenAI互換レスポンス返却
+    // -----------------------------
+    // 6️⃣ リトライ処理（429対応）
+    // -----------------------------
+    let answer = "（回答が得られませんでした）";
+    const maxRetries = 5;
+    let attempt = 0;
+
+    while (attempt < maxRetries) {
+      const apiRes = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...apiKeyHeader },
+        body: JSON.stringify(body),
+      });
+
+      const data = await safeJson(apiRes);
+
+      // レスポンス取得
+      if (selectedModel.startsWith("openrouter:")) {
+        answer = data?.choices?.[0]?.message?.content || answer;
+      } else {
+        answer = data?.candidates?.[0]?.content?.parts?.[0]?.text || answer;
+      }
+
+      if (answer !== "（回答が得られませんでした）") break;
+
+      // 429ならリトライ
+      if (apiRes.status === 429) {
+        console.warn(`⚠️ Rate limited, retrying in 3s... (attempt ${attempt + 1})`);
+        await new Promise(r => setTimeout(r, 3000));
+        attempt++;
+      } else {
+        break;
+      }
+    }
+
+    // -----------------------------
+    // 7️⃣ OpenAI互換レスポンス返却
+    // -----------------------------
     res.json({
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
@@ -100,72 +168,20 @@ ${chatHistory}
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`🌐 Server running on port ${PORT}`)
-);
-
-// -----------------------------
-// Gemini API呼び出し
-// -----------------------------
-async function callGemini(model, promptWithContext) {
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: promptWithContext }] }],
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-          ]
-        }),
-      }
-    );
-    const data = await safeJson(res);
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "（Geminiから回答が得られませんでした）";
-  } catch (err) {
-    console.error("Gemini API error:", err);
-    return "（Gemini呼び出し中にエラーが発生しました）";
-  }
-}
-
-// -----------------------------
-// OpenRouter API呼び出し
-// -----------------------------
-async function callOpenRouter(modelName, messages) {
-  try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages: messages
-      })
-    });
-    const data = await safeJson(res);
-    return data?.choices?.[0]?.message?.content || "（OpenRouterから回答が得られませんでした）";
-  } catch (err) {
-    console.error("OpenRouter API error:", err);
-    return "（OpenRouter呼び出し中にエラーが発生しました）";
-  }
-}
-
 // -----------------------------
 // 安全なJSON解析
 // -----------------------------
 async function safeJson(res) {
   const text = await res.text();
-  try { return JSON.parse(text); }
-  catch { 
+  try {
+    return JSON.parse(text);
+  } catch {
     console.error("⚠️ Invalid JSON:", text.slice(0, 500));
     return {};
   }
 }
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () =>
+  console.log(`🌐 Server running on port ${PORT}`)
+);
