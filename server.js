@@ -158,7 +158,7 @@ async function summarizeSystemPrompt(systemPrompt) {
               role: "user",
               parts: [
                 {
-                  text: `text: `以下の文章を、長さを7割程度に抑えて要約してください。重要な情報は残してください:\n\n${systemPrompt}`
+                  text: `以下の文章を、長さを7割程度に抑えて要約してください。重要な情報は残してください:\n\n${systemPrompt}`
                 }
               ]
             }
