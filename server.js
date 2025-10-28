@@ -22,7 +22,7 @@ app.post("/v1/chat/completions", async (req, res) => {
       return res.status(400).json({ error: "No messages found" });
     }
 
-    // 🔹 最後の user メッセージだけを検索に使用
+    // 最後のユーザー発言だけを検索に使用
     const lastUserMessage = messages
       .filter((m) => m.role === "user")
       .slice(-1)[0]?.content;
@@ -52,7 +52,7 @@ app.post("/v1/chat/completions", async (req, res) => {
       }
     }
 
-    // 🔹 Geminiに送るプロンプトを作成
+    // Geminiに送信するプロンプト
     const promptWithContext = `
 以下はユーザーとの小説的会話です。検索結果も参考にしてください。
 
@@ -63,7 +63,7 @@ ${context}
 ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\n")}
 `;
 
-    // 🔹 Gemini API 呼び出し
+    // Gemini API 呼び出し
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -81,7 +81,7 @@ ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\n")}
       geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "（Geminiから回答が得られませんでした）";
 
-    // 🔹 OpenAI互換レスポンス
+    // OpenAI互換レスポンス
     res.json({
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
@@ -106,7 +106,7 @@ app.listen(PORT, () =>
   console.log(`🌐 Server running on port ${PORT} (model: ${GEMINI_MODEL})`)
 );
 
-// 🔹 安全なJSON解析
+// 安全なJSON解析
 async function safeJson(res) {
   const text = await res.text();
   try {
