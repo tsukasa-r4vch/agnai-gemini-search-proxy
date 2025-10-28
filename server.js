@@ -83,7 +83,7 @@ ${chatHistory}
     let answer = "（Geminiから回答が得られませんでした）";
     let count = 0;
 
-    while(answer == "（Geminiから回答が得られませんでした）" && count < 5){
+//    while(answer == "（Geminiから回答が得られませんでした）" && count < 5){
       // -----------------------------
       // 5️⃣ Gemini API 呼び出し
       // -----------------------------
@@ -122,7 +122,7 @@ ${chatHistory}
         geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
         "（Geminiから回答が得られませんでした）";
       count++;
-    }
+//    }
 
     // -----------------------------
     // 6️⃣ OpenAI互換レスポンス返却
