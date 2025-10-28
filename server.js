@@ -80,44 +80,47 @@ ${context}
 会話履歴:
 ${chatHistory}
 `;
+    let answer = "（Geminiから回答が得られませんでした）";
 
-    // -----------------------------
-    // 5️⃣ Gemini API 呼び出し
-    // -----------------------------
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: promptWithContext }] }],
-          safetySettings: [
-            {
-              category: "HARM_CATEGORY_HARASSMENT",
-              threshold: "BLOCK_NONE"
-            },
-            {
-              category: "HARM_CATEGORY_HATE_SPEECH",
-              threshold: "BLOCK_NONE"
-            },
-            {
-              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              threshold: "BLOCK_NONE"
-            },
-            {
-              category: "HARM_CATEGORY_DANGEROUS_CONTENT ",
-              threshold: "BLOCK_NONE"
-            }
-          ]
-        }),
-      }
-    );
+    while(answer = "（Geminiから回答が得られませんでした）"){
+      // -----------------------------
+      // 5️⃣ Gemini API 呼び出し
+      // -----------------------------
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: promptWithContext }] }],
+            safetySettings: [
+              {
+                category: "HARM_CATEGORY_HARASSMENT",
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_HATE_SPEECH",
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                threshold: "BLOCK_NONE"
+              },
+              {
+                category: "HARM_CATEGORY_DANGEROUS_CONTENT ",
+                threshold: "BLOCK_NONE"
+              }
+            ]
+          }),
+        }
+      );
 
-    const geminiData = await safeJson(geminiRes);
+      const geminiData = await safeJson(geminiRes);
 
-    const answer =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "（Geminiから回答が得られませんでした）";
+      answer =
+        geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        "（Geminiから回答が得られませんでした）";
+    }
 
     // -----------------------------
     // 6️⃣ OpenAI互換レスポンス返却
