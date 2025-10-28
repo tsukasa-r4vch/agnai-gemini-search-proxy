@@ -8,6 +8,13 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
+const OPENROUTER_MODELS = [
+  "openrouter:microsoft/mai-ds-r1:free"
+];
+const GEMINI_MODELS = [
+  "models/gemini-2.0-flash-lite",
+  "models/gemini-2.5-flash-lite"
+];
 
 // -----------------------------
 // サービス稼働確認
@@ -15,6 +22,17 @@ const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 app.get("/", (_, res) =>
   res.send(`✅ Gemini + OpenRouter + Tavily Proxy running`)
 );
+
+// -----------------------------
+// モデル一覧取得 (OpenAI互換)
+// -----------------------------
+app.get("/v1/models", (_, res) => {
+  const models = [
+    ...GEMINI_MODELS.map((m) => ({ id: m, object: "model" })),
+    ...OPENROUTER_MODELS.map((m) => ({ id: m, object: "model" }))
+  ];
+  res.json({ data: models });
+});
 
 // -----------------------------
 // OpenAI互換エンドポイント
