@@ -83,7 +83,7 @@ ${chatHistory}
     let answer = "（Geminiから回答が得られませんでした）";
     let count = 0;
 
-//    while(answer == "（Geminiから回答が得られませんでした）" && count < 5){
+    while(answer == "（Geminiから回答が得られませんでした）" && count < 5){
       // -----------------------------
       // 5️⃣ Gemini API 呼び出し
       // -----------------------------
@@ -95,10 +95,10 @@ ${chatHistory}
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: promptWithContext }] }],
             safetySettings: [
-              { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+              { category: "HARM_CATEGORY_HARASSMENT", threshold: "OFF" },
+              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "OFF" },
+              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "OFF" },
+              { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "OFF" }
             ]
           }),
         }
@@ -110,7 +110,7 @@ ${chatHistory}
         geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
         "（Geminiから回答が得られませんでした）";
       count++;
-//    }
+    }
 
     // -----------------------------
     // 6️⃣ OpenAI互換レスポンス返却
