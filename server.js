@@ -149,9 +149,14 @@ async function callOpenRouter(model, messages) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
       },
-      body: JSON.stringify({ model, messages }),
+      body: JSON.stringify({
+        model,
+        messages,        // OpenAI互換形式で送信
+        stream: false,   // 念のため明示
+        max_tokens: 1024 // 必要に応じて調整
+      }),
     });
     const data = await safeJson(res);
     return data?.choices?.[0]?.message?.content || "（OpenRouterから回答が得られませんでした）";
@@ -160,6 +165,7 @@ async function callOpenRouter(model, messages) {
     return "（OpenRouter呼び出しでエラー発生）";
   }
 }
+
 
 // -----------------------------
 // 安全JSON解析
