@@ -12,6 +12,7 @@ app.get("/", (_, res) =>
   res.send(`✅ Gemini + Tavily Proxy running on model: ${GEMINI_MODEL}`)
 );
 
+// OpenAI互換エンドポイント
 app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { model, messages } = req.body;
@@ -21,17 +22,16 @@ app.post("/v1/chat/completions", async (req, res) => {
       return res.status(400).json({ error: "No messages found" });
     }
 
-    // 🔹 messages を結合してユーザ質問を抽出
-    const userMessages = messages
+    // 🔹 最後の user メッセージだけを検索に使用
+    const lastUserMessage = messages
       .filter((m) => m.role === "user")
-      .map((m) => m.content)
-      .join("\n");
+      .slice(-1)[0]?.content;
 
-    if (!userMessages) {
+    if (!lastUserMessage) {
       return res.status(400).json({ error: "No user text found" });
     }
 
-    // 🔎 Tavily 検索
+    // 🔎 Tavily検索
     let context = "（検索結果なし）";
     if (TAVILY_API_KEY) {
       try {
@@ -41,7 +41,7 @@ app.post("/v1/chat/completions", async (req, res) => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${TAVILY_API_KEY}`,
           },
-          body: JSON.stringify({ query: userMessages, max_results: 3 }),
+          body: JSON.stringify({ query: lastUserMessage, max_results: 3 }),
         });
         const tavilyData = await safeJson(tavilyRes);
         context =
@@ -52,26 +52,15 @@ app.post("/v1/chat/completions", async (req, res) => {
       }
     }
 
-    // 🔹 Gemini に送信するプロンプト作成
-    const fullPrompt = messages
-      .map((m) => {
-        const roleLabel =
-          m.role === "system"
-            ? "システム"
-            : m.role === "user"
-            ? "ユーザー"
-            : "アシスタント";
-        return `${roleLabel}: ${m.content}`;
-      })
-      .join("\n\n");
-
+    // 🔹 Geminiに送るプロンプトを作成
     const promptWithContext = `
-次の検索結果をもとに、ユーザーの質問に日本語で答えてください。
+以下はユーザーとの小説的会話です。検索結果も参考にしてください。
 
 検索結果:
 ${context}
 
-${fullPrompt}
+会話履歴:
+${messages.map((m) => `${m.role}: ${m.content}`).join("\n\n")}
 `;
 
     // 🔹 Gemini API 呼び出し
@@ -117,7 +106,7 @@ app.listen(PORT, () =>
   console.log(`🌐 Server running on port ${PORT} (model: ${GEMINI_MODEL})`)
 );
 
-// 🔹 安全な JSON 解析
+// 🔹 安全なJSON解析
 async function safeJson(res) {
   const text = await res.text();
   try {
