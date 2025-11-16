@@ -9,7 +9,8 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 const OPENROUTER_MODELS = [
-  "openrouter:microsoft/mai-ds-r1:free"
+  "openrouter:microsoft/mai-ds-r1:free",
+  "openrouter:tngtech/deepseek-r1t2-chimera:free"
 ];
 const GEMINI_MODELS = [
   "models/gemini-2.0-flash-lite",
