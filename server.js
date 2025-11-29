@@ -9,8 +9,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash-lite";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 const OPENROUTER_MODELS = [
-  "openrouter:microsoft/mai-ds-r1:free",
-  "openrouter:tngtech/deepseek-r1t2-chimera:free"
+  "openrouter:google/gemini-2.0-flash-exp:free"
 ];
 const GEMINI_MODELS = [
   "models/gemini-2.0-flash-lite",
